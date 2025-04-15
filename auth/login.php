@@ -7,13 +7,14 @@
         <button id="themeToggle" class="button is-light none">
             <span class="icon">
                     <i class="fas fa-moon"></i>
+
              </span>
         </button>
                             
     </div>
 </section>
     
-<section class="hero is-fullheight">
+<section class="hero is-fullheight a">
   <div class="hero-body">
     <div class="container">
       <div class="columns is-centered">
