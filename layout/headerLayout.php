@@ -38,7 +38,11 @@ body {
     color: var(--text);
     transition: background-color 0.3s ease, color 0.3s ease;
 }
-
+.fs{
+    background: url('../public/assets/images/onboarding.jpg') no-repeat center center fixed;
+    overflow: hidden;
+    height: 100vh;
+}
 body.dark-mode {
     background-color: var(--background-dark);
     color: var(--text-dark);
