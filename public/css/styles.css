@@ -1,0 +1,37 @@
+
+@font-face {
+    font-family: 'chicago';
+    src:  url('../assets/font/Chicago.otf');
+  }
+
+.hero {
+    background: url('../assets/images/header.jpg') no-repeat center center;
+    background-size: cover;
+    height: 100vh;
+}
+.navbar-h{
+    width: 100vw;
+    position: fixed;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding-left: 20px;
+    padding-right:40px;
+    margin-top: 5px;
+    padding-top:10px ;
+
+}
+.auth{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+.logo{
+    font-family: 'chicago' ;
+    color: black;
+    font-weight: bold;
+    font-size: 44px;
+    margin-top: 5px;
+}
