@@ -7,11 +7,11 @@
     <h2 class="logo">Sweet Bites</h2>
   </div>
   <div class="auth">
-    <a class="button is-light is-outline is-rounded">SignUp</a>
+    <a class="button is-light is-outline is-rounded" href="onboarding.php">SignUp</a>
     <a class="button is-dark  is-outline is-rounded" href="auth//login.php">Login</a>
   </div>
 </nav>
-  <section class="hero is-success is-halfheight">
+  <section class="hero  is-success is-halfheight">
   <div class="hero-body">
     <div class="container has-text-centered">
       <h1 class="is-1 text-1">
