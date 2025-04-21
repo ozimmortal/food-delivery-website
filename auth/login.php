@@ -26,7 +26,7 @@
               </span>
               <p class="subtitle is-5 mt-2">Sign in to your account</p>
             </div>
-            <form action="ls-login.php" method="POST">
+            <form action="login-pros.php" method="POST">
               <div class="field">
                 <label class="label">Email</label>
                 <div class="control has-icons-left">
@@ -58,7 +58,7 @@
               </div>
             </form>
             <div class="has-text-centered">
-              <p class="is-size-7">Don't have an account? <a href="signup.php">Sign up</a></p>
+              <p class="is-size-7">Don't have an account? <a href="../onboarding.php">Sign up</a></p>
             </div>
           </div>
         </div>

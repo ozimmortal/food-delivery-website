@@ -7,5 +7,6 @@
 </head>
 <body>
     DashBoard
+    <a href="../auth/logout.php">logout</a>
 </body>
 </html>
