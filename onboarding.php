@@ -16,7 +16,7 @@ include './layout/headerLayout.php';
             <div class="columns is-multiline is-centered ">
               <!-- Customer Option -->
               <div class="column is-4">
-                <div class="card role-card" data-role="customer">
+                <div class="card role-card" data-role="customer" id="role-btn">
                   <div class="card-content">
                     <span class="icon is-large has-text-primary mb-4">
                       <i class="fas fa-utensils fa-3x"></i>
@@ -29,7 +29,7 @@ include './layout/headerLayout.php';
               
               <!-- Delivery Option -->
               <div class="column is-4">
-                <div class="card role-card" data-role="delivery">
+                <div class="card role-card" data-role="delivery" id="role-btn">
                   <div class="card-content">
                     <span class="icon is-large has-text-info mb-4">
                       <i class="fas fa-motorcycle fa-3x"></i>
@@ -42,7 +42,7 @@ include './layout/headerLayout.php';
               
               <!-- Restaurant Option -->
               <div class="column is-4">
-                <div class="card role-card" data-role="restaurant">
+                <div class="card role-card" data-role="restaurant" id="role-btn">
                   <div class="card-content">
                     <span class="icon is-large has-text-danger mb-4">
                       <i class="fas fa-store fa-3x"></i>
@@ -94,6 +94,19 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 });
+
+const allROleBtn = document.querySelectorAll('#role-btn')
+allROleBtn.forEach((e)=>{
+  e.addEventListener('click',function(){
+    
+    const role = e.getAttribute("data-role");
+    const baseUrl = window.location.origin + '/food-delivery-website/auth/signup.php';
+    const newUrl = baseUrl + `?role=${role}`
+    window.location.href = newUrl
+
+
+  })
+})
 </script>
 
 <style>
