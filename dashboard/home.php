@@ -1,3 +1,10 @@
+<?php
+    include './middleware.php';
+?>
+
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,5 +15,6 @@
 <body>
     DashBoard
     <a href="../auth/logout.php">logout</a>
+    Role : <?php echo $role ?>
 </body>
 </html>
