@@ -1,7 +1,7 @@
 <?php 
 
 
-$dsn = "mysql:host=localhost;dbname=delivery_database";
+$dsn = "mysql:host=localhost:3309;dbname=delivery_database";
 $dbusrn = "root";
 $dbpwd = "";
 
