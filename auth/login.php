@@ -71,9 +71,10 @@
 
 <script>
   function validateLoginForm() {
+    
     const email = document.querySelector('input[name="email"]').value.trim();
     const password = document.querySelector('input[name="password"]').value;
-    const emailPattern = /^[^ ]+@[^ ]+\.[a-z]{2,3}$/;
+    const emailPattern = /^[^ ]+@[^ ]+\.[a-z]$/;
 
     if (email === "" || password === "") 
      {
