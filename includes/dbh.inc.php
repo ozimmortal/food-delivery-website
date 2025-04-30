@@ -1,14 +1,18 @@
 <?php 
 
-
-$dsn = "mysql:host=localhost:3309;dbname=delivery_database";
+$host = "127.0.0.1";
+$port = "3306";
+$dbname = "dl";
 $dbusrn = "root";
-$dbpwd = "";
+$dbpwd = "oliy2627";
 
+// Correct DSN format
+$dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8mb4";
 
 try {
-    $pdo = new PDO($dsn,$dbusrn,$dbpwd);
+    $pdo = new PDO($dsn, $dbusrn, $dbpwd);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-}catch(PDOException $e){
-    echo "Database Connection failed: " .$e->getMessage();
+    // Optional: echo "Connected successfully";
+} catch(PDOException $e) {
+    echo "Database connection failed: " . $e->getMessage();
 }

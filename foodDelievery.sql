@@ -4,6 +4,8 @@ CREATE TABLE users (
     email VARCHAR(100) UNIQUE,
     password VARCHAR(255),
     role ENUM('customer', 'restaurant', 'delivery'),
+    phone VARCHAR(20),
+    image VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE restaurants (
@@ -12,6 +14,7 @@ CREATE TABLE restaurants (
     name VARCHAR(100),
     address TEXT,
     phone VARCHAR(20),
+    image VARCHAR(255),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 CREATE TABLE menu_items (
@@ -21,6 +24,7 @@ CREATE TABLE menu_items (
     description TEXT,
     price DECIMAL(10, 2),
     available BOOLEAN DEFAULT TRUE,
+    image VARCHAR(255),
     FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
 );
 CREATE TABLE orders (
