@@ -87,10 +87,14 @@
 
 <script>
   function validatesignupForm() {
+    
+    const name = document.querySelector('input[name="name"]').value.trim();
     const email = document.querySelector('input[name="email"]').value.trim();
     const password = document.querySelector('input[name="password"]').value;
-    const emailPattern = /^[^ ]+@[^ ]+\.[a-z]{2,3}$/;
-    const namePattern = /^[A-Za-z\s]+$/; // only letters and spaces
+    
+    const emailPattern = /^[^ ]+@[^ ]+\.[a-z]$/;
+    const namePattern = /^[A-Za-z\s]+$/; // 
+
      if (name === "" || email === "" || password === "") 
      {
       alert("All fields are required.");
