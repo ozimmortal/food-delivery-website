@@ -8,6 +8,8 @@ CREATE TABLE users (
     image VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+
 CREATE TABLE restaurants (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT,
@@ -17,6 +19,9 @@ CREATE TABLE restaurants (
     image VARCHAR(255),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+
+
 CREATE TABLE menu_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
     restaurant_id INT,
@@ -27,6 +32,8 @@ CREATE TABLE menu_items (
     image VARCHAR(255),
     FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
 );
+
+
 CREATE TABLE orders (
     id INT AUTO_INCREMENT PRIMARY KEY,
     customer_id INT,
@@ -41,6 +48,8 @@ CREATE TABLE orders (
     FOREIGN KEY (restaurant_id) REFERENCES restaurants(id),
     FOREIGN KEY (delivery_id) REFERENCES users(id)
 );
+
+
 CREATE TABLE order_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
     order_id INT,
@@ -50,6 +59,8 @@ CREATE TABLE order_items (
     FOREIGN KEY (order_id) REFERENCES orders(id),
     FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
 );
+
+
 CREATE TABLE delivery_locations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     delivery_id INT,
