@@ -71,3 +71,6 @@ CREATE TABLE delivery_locations (
     FOREIGN KEY (delivery_id) REFERENCES users(id),
     FOREIGN KEY (order_id) REFERENCES orders(id)
 );
+
+
+ALTER TABLE users ADD COLUMN address TEXT AFTER phone;

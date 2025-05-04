@@ -70,8 +70,9 @@
                 <div class="flex items-center">
                     <a href="#" class="text-2xl font-bold text-orange-500 flex items-center">
                         <i class="fas fa-utensils mr-2"></i>
-                        Savory
+                        Sweet Bite
                     </a>
+                    
                 </div>
                 
                 <div class="hidden md:flex space-x-8">
@@ -84,7 +85,7 @@
                 
                 <div class="flex items-center space-x-4">
                     <a href="auth/login.php" class="text-orange-500 hover:text-orange-600">Login</a>
-                    <a href="auth/register.php" class="bg-orange-500 text-white px-4 py-2 rounded-full btn-primary">
+                    <a href="onboarding.php" class="bg-orange-500 text-white px-4 py-2 rounded-full btn-primary">
                         Sign Up
                     </a>
                 </div>
