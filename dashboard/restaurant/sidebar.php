@@ -7,6 +7,10 @@
   $usr = $stmt->fetch();
   $image = $usr['image'];
 
+  if(!isset($image)){
+    $image = "https://dovercourt.org/wp-content/uploads/2019/11/610-6104451_image-placeholder-png-user-profile-placeholder-image-png.jpg";
+  }
+
 ?>
 
 <div class="sidebar">
