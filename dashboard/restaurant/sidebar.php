@@ -75,7 +75,7 @@
             <span class="user-name">Admin</span>
             <span class="user-role">Restaurant Owner</span>
         </div>
-        <a href="#" class="logout-btn">
+        <a href="../../auth/logout.php" class="logout-btn">
             <i class="fas fa-sign-out-alt"></i>
         </a>
     </div>
