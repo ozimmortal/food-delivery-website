@@ -26,7 +26,9 @@
               </span>
               <p class="subtitle is-5 mt-2">Sign in to your account</p>
             </div>
-            <form action="login-pros.php" method="POST">
+
+            
+            <form action="login-pros.php" method="POST" onsubmit="return validateLoginForm()>
               <div class="field">
                 <label class="label">Email</label>
                 <div class="control has-icons-left">
@@ -66,6 +68,56 @@
     </div>
   </div>
 </section>
+
+<script>
+  function validateLoginForm() {
+    
+    const email = document.querySelector('input[name="email"]').value.trim();
+    const password = document.querySelector('input[name="password"]').value;
+    const emailPattern = /^[^ ]+@[^ ]+\.[a-z]$/;
+
+    if (email === "" || password === "") 
+     {
+      alert("All fields are required.");
+      return false;
+     }
+    
+    if (email === "") {
+      alert("Email is required.");
+      return false;
+    }
+    if (password === "") {
+      alert("Password is required.");
+      return false;
+    }
+    
+    if (email.length > 50) {
+      alert("Email must be less than 50 characters.");
+      return false;
+    }
+    
+    if (password.length > 50) {
+      alert("Password must be less than 50 characters.");
+      return false;
+    }
+    if (email.length < 5) {
+      alert("Email must be at least 5 characters.");
+      return false;
+    }
+
+    if (!emailPattern.test(email)) {
+      alert("Please enter a valid email address.");
+      return false;
+    }
+
+    if (password.length < 6) {
+      alert("Password must be at least 6 characters.");
+      return false;
+    }
+
+    return true;
+  }
+</script>
 
 
 <?php

@@ -31,7 +31,8 @@
               </span>
               <p class="subtitle is-5 mt-2"><?php echo $role ?> Sign up</p>
             </div>
-            <form action="./signup-pros.php" method="POST">
+            
+            <form action="./signup-pros.php" method="POST" onsubmit="return validatesignupForm()" >
 
             <div class="field">
                 <label class="label">Full Name</label>
@@ -82,6 +83,70 @@
     </div>
   </div>
 </section>
+
+
+<script>
+  function validatesignupForm() {
+    
+    const name = document.querySelector('input[name="name"]').value.trim();
+    const email = document.querySelector('input[name="email"]').value.trim();
+    const password = document.querySelector('input[name="password"]').value;
+    
+    const emailPattern = /^[^ ]+@[^ ]+\.[a-z]$/;
+    const namePattern = /^[A-Za-z\s]+$/; // 
+
+     if (name === "" || email === "" || password === "") 
+     {
+      alert("All fields are required.");
+      return false;
+     }
+    if (!namePattern.test(name)) {
+      alert("Name can only contain letters and spaces.");
+      return false;
+    }
+    if (name.length < 3) {
+      alert("Name must be at least 3 characters.");
+      return false;
+    }
+    if (email === "") {
+      alert("Email is required.");
+      return false;
+    }
+    if (password === "") {
+      alert("Password is required.");
+      return false;
+    }
+    if (name.length > 50) {
+      alert("Name must be less than 50 characters.");
+      return false;
+    }
+    if (email.length > 50) {
+      alert("Email must be less than 50 characters.");
+      return false;
+    }
+    
+    if (password.length > 50) {
+      alert("Password must be less than 50 characters.");
+      return false;
+    }
+    if (email.length < 5) {
+      alert("Email must be at least 5 characters.");
+      return false;
+    }
+
+    if (!emailPattern.test(email)) {
+      alert("Please enter a valid email address.");
+      return false;
+    }
+
+    if (password.length < 6) {
+      alert("Password must be at least 6 characters.");
+      return false;
+    }
+
+    return true;
+  }
+</script>
 
 
 <?php
