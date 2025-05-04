@@ -52,28 +52,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $passwordParams = [password_hash($_POST['new_password'], PASSWORD_DEFAULT)];
         }
 
-        // Update owner
-        $stmt = $pdo->prepare("
-            UPDATE users 
-            SET 
-                name = ?,
-                phone = ?,
-                image = COALESCE(?, profile_pic)
-            WHERE id = ?
-        ");
+        // Update user
+        $sql = "UPDATE users 
+                SET name = ?,
+                    phone = ?,
+                    image = COALESCE(?, image)";
         
+        // Add password update if needed
+        if (!empty($passwordUpdate)) {
+            $sql .= $passwordUpdate;
+        }
+        
+        $sql .= " WHERE id = ?";
+        
+        $stmt = $pdo->prepare($sql);
+        
+        // Build parameters array
         $params = [
             htmlspecialchars($_POST['name']),
             htmlspecialchars($_POST['phone']),
-            $imagePath,
-            $_SESSION['user_id']
+            $imagePath
         ];
         
+        // Add password if being updated
         if (!empty($passwordParams)) {
             $params = array_merge($params, $passwordParams);
         }
         
-        $params[] = $_SESSION['user_id']; // For WHERE clause
+        // Add user ID for WHERE clause
+        $params[] = $_SESSION['user_id'];
         
         $stmt->execute($params);
         
