@@ -146,7 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <a href="my_orders.php" class="text-gray-600 hover:text-orange-500">
                         <i class="fas fa-clipboard-list mr-1"></i> My Orders
                     </a>
-                    <a href="../auth/logout.php" class="text-gray-600 hover:text-orange-500">
+                    <a href="../../auth/logout.php" class="text-gray-600 hover:text-orange-500">
                         <i class="fas fa-sign-out-alt mr-1"></i> Logout
                     </a>
                 </div>
