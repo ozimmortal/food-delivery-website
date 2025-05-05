@@ -1,4 +1,5 @@
 <?php
+ob_start();
 session_start();
 require_once '../../includes/dbh.inc.php';
 
@@ -10,13 +11,15 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'customer') {
 
 $userId = $_SESSION['user_id'];
 
-
-// Get customer's address if set
+// Get customer's details
 $customerAddress = null;
-$stmt = $pdo->prepare("SELECT address, image FROM users WHERE id = ?");
+$customerLat = null;
+$customerLng = null;
+$stmt = $pdo->prepare("SELECT address, phone, image FROM users WHERE id = ?");
 $stmt->execute([$userId]);
 $user = $stmt->fetch();
-$image = $user['image'];
+$image = $user['image'] ?? 'assets/default-user.jpg';
+$phone = $user['phone'] ?? '';
 if ($user && !empty($user['address'])) {
     $customerAddress = $user['address'];
 }
@@ -27,8 +30,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     $menuItemId = $_POST['menu_item_id'];
     $quantity = $_POST['quantity'] ?? 1;
 
-    // Initialize cart if not exists
-    if (!isset($_SESSION['cart'])) {
+    // Initialize cart with proper structure if not exists
+    if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) {
         $_SESSION['cart'] = [
             'restaurant_id' => $restaurantId,
             'items' => []
@@ -36,10 +39,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     }
 
     // Check if adding from different restaurant
-    if ($_SESSION['cart']['restaurant_id'] != $restaurantId) {
+    if (isset($_SESSION['cart']['restaurant_id']) && $_SESSION['cart']['restaurant_id'] != $restaurantId) {
         $_SESSION['cart_error'] = "You can only order from one restaurant at a time. Please clear your cart or complete your current order first.";
         header("Location: index.php?restaurant_id=$restaurantId");
         exit();
+    }
+
+    // Ensure items array exists
+    if (!isset($_SESSION['cart']['items'])) {
+        $_SESSION['cart']['items'] = [];
     }
 
     // Get menu item details
@@ -64,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                 'name' => $menuItem['name'],
                 'price' => $menuItem['price'],
                 'quantity' => $quantity,
-                'image' => $menuItem['image']
+                'image' => $menuItem['image'] ?? 'assets/default-food.jpg'
             ];
         }
 
@@ -107,6 +115,29 @@ if (isset($_GET['clear_cart'])) {
     exit();
 }
 
+// Handle saving location
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_location'])) {
+    $lat = $_POST['lat'];
+    $lng = $_POST['lng'];
+    $address = $_POST['address'] ?? '';
+    
+    // Validate coordinates
+    if (is_numeric($lat) && is_numeric($lng) && $lat >= -90 && $lat <= 90 && $lng >= -180 && $lng <= 180) {
+        // Update user's address
+        $stmt = $pdo->prepare("UPDATE users SET address = ? WHERE id = ?");
+        $stmt->execute([$address, $userId]);
+        
+        $_SESSION['lat'] = $lat;
+        $_SESSION['lng'] = $lng;
+        $_SESSION['location_success'] = "Location updated successfully!";
+    } else {
+        $_SESSION['location_error'] = "Invalid coordinates received.";
+    }
+    
+    header("Location: index.php" . (isset($_GET['restaurant_id']) ? "?restaurant_id=" . $_GET['restaurant_id'] : ""));
+    exit();
+}
+
 // Handle placing order
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
     if (!isset($_SESSION['cart']) || empty($_SESSION['cart']['items'])) {
@@ -119,6 +150,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
     $address = $_POST['delivery_address'];
     if (empty($address)) {
         $_SESSION['cart_error'] = "Please enter a delivery address";
+        header("Location: index.php");
+        exit();
+    }
+
+    // Get coordinates if available
+    $lat = $_POST['lat'] ?? $_SESSION['lat'] ?? null;
+    $lng = $_POST['lng'] ?? $_SESSION['lng'] ?? null;
+    
+    // Validate coordinates
+    if ($lat === null || $lng === null || !is_numeric($lat) || !is_numeric($lng)) {
+        $_SESSION['cart_error'] = "Please set your delivery location on the map";
         header("Location: index.php");
         exit();
     }
@@ -140,8 +182,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
         $pdo->beginTransaction();
 
         // Insert order
-        $stmt = $pdo->prepare("INSERT INTO orders (customer_id, restaurant_id, total, status, created_at) VALUES (?, ?, ?, 'placed', NOW())");
-        $stmt->execute([$userId, $_SESSION['cart']['restaurant_id'], $total]);
+        $stmt = $pdo->prepare("INSERT INTO orders (customer_id, restaurant_id, total, status, customer_latitude, customer_longitude, created_at) VALUES (?, ?, ?, 'placed', ?, ?, NOW())");
+        $stmt->execute([
+            $userId, 
+            $_SESSION['cart']['restaurant_id'], 
+            $total,
+            $lat,
+            $lng
+        ]);
         $orderId = $pdo->lastInsertId();
 
         // Insert order items
@@ -202,6 +250,8 @@ if (isset($_GET['restaurant_id'])) {
     <title>Order Food | Savory</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         .restaurant-card, .menu-item-card {
             transition: all 0.3s ease;
@@ -224,6 +274,22 @@ if (isset($_GET['restaurant_id'])) {
             color: #f97316;
             font-weight: 500;
         }
+        #map {
+            height: 300px;
+            width: 100%;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            z-index: 0;
+        }
+        .location-btn {
+            transition: all 0.2s ease;
+        }
+        .location-btn:hover {
+            background-color: #f0f0f0;
+        }
+        .leaflet-control-attribution {
+            font-size: 10px;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -237,7 +303,7 @@ if (isset($_GET['restaurant_id'])) {
                         Sweet Bite
                     </a>
                     <div class="user-avatar w-10 h-10 rounded-full ml-4 border-blue-100">
-                            <img src="../<?php echo $image ?>" alt="User Avatar" class="w-10 h-10 rounded-full">
+                            <img src="../../<?php echo htmlspecialchars($image) ?>" alt="User Avatar" class="w-10 h-10 rounded-full">
                     </div>
                 </div>
                 <div class="flex items-center space-x-4">
@@ -271,16 +337,30 @@ if (isset($_GET['restaurant_id'])) {
         <!-- Messages -->
         <?php if (isset($_SESSION['cart_success'])): ?>
             <div class="bg-green-100 border-l-4 border-green-500 p-4 mb-6">
-                <p class="text-green-700"><?= $_SESSION['cart_success'] ?></p>
+                <p class="text-green-700"><?= htmlspecialchars($_SESSION['cart_success']) ?></p>
             </div>
             <?php unset($_SESSION['cart_success']); ?>
         <?php endif; ?>
 
         <?php if (isset($_SESSION['cart_error'])): ?>
             <div class="bg-red-100 border-l-4 border-red-500 p-4 mb-6">
-                <p class="text-red-700"><?= $_SESSION['cart_error'] ?></p>
+                <p class="text-red-700"><?= htmlspecialchars($_SESSION['cart_error']) ?></p>
             </div>
             <?php unset($_SESSION['cart_error']); ?>
+        <?php endif; ?>
+
+        <?php if (isset($_SESSION['location_success'])): ?>
+            <div class="bg-green-100 border-l-4 border-green-500 p-4 mb-6">
+                <p class="text-green-700"><?= htmlspecialchars($_SESSION['location_success']) ?></p>
+            </div>
+            <?php unset($_SESSION['location_success']); ?>
+        <?php endif; ?>
+
+        <?php if (isset($_SESSION['location_error'])): ?>
+            <div class="bg-red-100 border-l-4 border-red-500 p-4 mb-6">
+                <p class="text-red-700"><?= htmlspecialchars($_SESSION['location_error']) ?></p>
+            </div>
+            <?php unset($_SESSION['location_error']); ?>
         <?php endif; ?>
 
         <div class="flex flex-col lg:flex-row gap-8">
@@ -298,9 +378,9 @@ if (isset($_GET['restaurant_id'])) {
                     <?php else: ?>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <?php foreach ($restaurants as $restaurant): ?>
-                                <a href="index.php?restaurant_id=<?= $restaurant['id'] ?>" class="restaurant-card bg-white rounded-lg shadow overflow-hidden">
+                                <a href="index.php?restaurant_id=<?= htmlspecialchars($restaurant['id']) ?>" class="restaurant-card bg-white rounded-lg shadow overflow-hidden">
                                     <div class="relative">
-                                        <img src="../../<?= $restaurant['image'] ?: 'assets/default-restaurant.jpg' ?>" 
+                                        <img src="../../<?= htmlspecialchars($restaurant['image'] ?? 'assets/default-restaurant.jpg') ?>" 
                                              alt="<?= htmlspecialchars($restaurant['name']) ?>" 
                                              class="w-full h-48 object-cover">
                                     </div>
@@ -314,7 +394,7 @@ if (isset($_GET['restaurant_id'])) {
                                                 </p>
                                             </div>
                                             <span class="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">
-                                                <?= $restaurant['menu_items_count'] ?> items
+                                                <?= htmlspecialchars($restaurant['menu_items_count']) ?> items
                                             </span>
                                         </div>
                                     </div>
@@ -347,7 +427,7 @@ if (isset($_GET['restaurant_id'])) {
                                 <div class="menu-item-card bg-white rounded-lg shadow overflow-hidden">
                                     <div class="flex flex-col md:flex-row">
                                         <div class="md:w-1/3">
-                                            <img src="../../<?= $item['image'] ?: 'assets/default-food.jpg' ?>" 
+                                            <img src="../../<?= htmlspecialchars($item['image'] ?? 'assets/default-food.jpg') ?>" 
                                                  alt="<?= htmlspecialchars($item['name']) ?>" 
                                                  class="w-full h-48 object-cover">
                                         </div>
@@ -360,8 +440,8 @@ if (isset($_GET['restaurant_id'])) {
                                             </div>
                                             <p class="text-gray-600 mt-2"><?= htmlspecialchars($item['description']) ?></p>
                                             <form method="POST" class="mt-4 flex items-center">
-                                                <input type="hidden" name="restaurant_id" value="<?= $selectedRestaurant['id'] ?>">
-                                                <input type="hidden" name="menu_item_id" value="<?= $item['id'] ?>">
+                                                <input type="hidden" name="restaurant_id" value="<?= htmlspecialchars($selectedRestaurant['id']) ?>">
+                                                <input type="hidden" name="menu_item_id" value="<?= htmlspecialchars($item['id']) ?>">
                                                 <div class="flex items-center mr-4">
                                                     <button type="button" class="quantity-btn bg-gray-200 px-3 py-1 rounded-l" onclick="decrementQuantity(this)">
                                                         <i class="fas fa-minus"></i>
@@ -385,28 +465,357 @@ if (isset($_GET['restaurant_id'])) {
             </div>
             
             <!-- Right Column - Cart -->
-            
+            <div class="lg:w-1/3">
+                <div class="bg-white rounded-lg shadow sticky top-4">
+                    <div class="p-4 border-b">
+                        <h3 class="font-bold text-lg flex items-center">
+                            <i class="fas fa-shopping-cart mr-2 text-orange-500"></i>
+                            Your Order
+                            <?php if (isset($_SESSION['cart']['restaurant_id']) && isset($selectedRestaurant)): ?>
+                                <span class="ml-auto text-sm font-normal">
+                                    <?= htmlspecialchars($selectedRestaurant['name']) ?>
+                                </span>
+                            <?php endif; ?>
+                        </h3>
+                    </div>
+                    
+                    <?php if (isset($_SESSION['cart']) && !empty($_SESSION['cart']['items'])): ?>
+                        <div class="p-4">
+                            <div class="space-y-3 mb-4 max-h-96 overflow-y-auto">
+                                <?php 
+                                $subtotal = 0;
+                                foreach ($_SESSION['cart']['items'] as $item): 
+                                    $itemTotal = $item['price'] * $item['quantity'];
+                                    $subtotal += $itemTotal;
+                                ?>
+                                    <div class="cart-item flex items-start p-2 border-b border-gray-100">
+                                        <img src="../../<?= htmlspecialchars($item['image'] ?? 'assets/default-food.jpg') ?>" 
+                                             alt="<?= htmlspecialchars($item['name']) ?>" 
+                                             class="w-12 h-12 object-cover rounded mr-3">
+                                        <div class="flex-grow">
+                                            <h4 class="font-medium"><?= htmlspecialchars($item['name']) ?></h4>
+                                            <div class="flex justify-between text-sm text-gray-600">
+                                                <span>$<?= number_format($item['price'], 2) ?> × <?= $item['quantity'] ?></span>
+                                                <span>$<?= number_format($itemTotal, 2) ?></span>
+                                            </div>
+                                        </div>
+                                        <a href="index.php?remove_item=<?= $item['id'] ?>&restaurant_id=<?= $_GET['restaurant_id'] ?? '' ?>" 
+                                           class="text-red-500 hover:text-red-700 ml-2">
+                                            <i class="fas fa-times"></i>
+                                        </a>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                            
+                            <div class="border-t border-gray-200 pt-3">
+                                <div class="flex justify-between mb-2">
+                                    <span>Subtotal:</span>
+                                    <span>$<?= number_format($subtotal, 2) ?></span>
+                                </div>
+                                <div class="flex justify-between font-bold text-lg">
+                                    <span>Total:</span>
+                                    <span>$<?= number_format($subtotal, 2) ?></span>
+                                </div>
+                                
+                                <!-- Delivery Address Form -->
+                                <form method="POST" class="mt-4" id="orderForm">
+                                    <div class="mb-4">
+                                        <label for="delivery_address" class="block text-sm font-medium text-gray-700 mb-1">
+                                            Delivery Address
+                                        </label>
+                                        <textarea id="delivery_address" name="delivery_address" rows="3" required
+                                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"><?= 
+                                            htmlspecialchars($customerAddress ?? '') ?></textarea>
+                                    </div>
+                                    
+                                    <div class="mb-4">
+                                        <label for="phone" class="block text-sm font-medium text-gray-700 mb-1">
+                                            Phone Number
+                                        </label>
+                                        <input type="text" id="phone" name="phone" value="<?= htmlspecialchars($phone) ?>" required
+                                            class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500">
+                                    </div>
+                                    
+                                    <!-- Location Section -->
+                                    <div class="mb-4">
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">
+                                            Delivery Location
+                                        </label>
+                                        <div class="flex items-center space-x-2 mb-2">
+                                            <button type="button" id="getLocationBtn" class="location-btn bg-gray-100 px-3 py-2 rounded flex items-center text-sm">
+                                                <i class="fas fa-location-arrow mr-2"></i> Use Current Location
+                                            </button>
+                                            <span id="locationStatus" class="text-sm text-gray-500"></span>
+                                        </div>
+                                        <div id="map"></div>
+                                        <input type="hidden" id="lat" name="lat" value="<?= isset($_SESSION['lat']) ? htmlspecialchars($_SESSION['lat']) : '' ?>">
+                                        <input type="hidden" id="lng" name="lng" value="<?= isset($_SESSION['lng']) ? htmlspecialchars($_SESSION['lng']) : '' ?>">
+                                    </div>
+                                    
+                                    <div class="flex space-x-2">
+                                        <a href="index.php?clear_cart=1&restaurant_id=<?= $_GET['restaurant_id'] ?? '' ?>" 
+                                           class="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300 flex-grow text-center">
+                                            Clear Cart
+                                        </a>
+                                        <button type="submit" name="place_order" 
+                                                class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 flex-grow">
+                                            Place Order
+                                        </button>
+                                    </div>
+                                </form>
+                                
+                                <!-- Separate form for saving location without placing order -->
+                                <form method="POST" id="locationForm" class="hidden">
+                                    <input type="hidden" id="save_lat" name="lat">
+                                    <input type="hidden" id="save_lng" name="lng">
+                                    <input type="hidden" id="save_address" name="address">
+                                    <input type="hidden" name="save_location" value="1">
+                                </form>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                        <div class="p-8 text-center text-gray-500">
+                            <i class="fas fa-shopping-cart text-4xl mb-3 text-gray-300"></i>
+                            <p>Your cart is empty</p>
+                            <?php if (!isset($_GET['restaurant_id'])): ?>
+                                <p class="text-sm mt-2">Select a restaurant to start ordering</p>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
     </div>
 
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
     <script>
-        // Quantity buttons functionality
+        let map;
+        let marker;
+        let geocoder = L.Control.Geocoder.nominatim();
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize map with default view
+            initMap(0, 0, 2);
+            
+            // Check if we have previous location in session
+            <?php if (isset($_SESSION['lat']) && isset($_SESSION['lng'])): ?>
+                initMap(<?= $_SESSION['lat'] ?>, <?= $_SESSION['lng'] ?>, 15);
+                updateLocation(<?= $_SESSION['lat'] ?>, <?= $_SESSION['lng'] ?>, "<?= addslashes($customerAddress ?? '') ?>");
+            <?php endif; ?>
+
+            // Set up location button
+            const locationBtn = document.getElementById('getLocationBtn');
+            locationBtn.addEventListener('click', requestLocationPermission);
+        });
+
+        function initMap(lat, lng, zoom) {
+            const mapElement = document.getElementById('map');
+            
+            if (map) {
+                map.remove();
+            }
+
+            map = L.map(mapElement).setView([lat, lng], zoom);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 18
+            }).addTo(map);
+
+            // Add geocoder control
+            L.Control.geocoder({
+                defaultMarkGeocode: false,
+                geocoder: geocoder,
+                position: 'topright',
+                placeholder: 'Search address...',
+                errorMessage: 'Address not found.'
+            })
+            .on('markgeocode', function(e) {
+                const center = e.geocode.center;
+                updateLocation(center.lat, center.lng, e.geocode.name);
+            })
+            .addTo(map);
+
+            // Add click handler for map
+            map.on('click', function(e) {
+                updateLocation(e.latlng.lat, e.latlng.lng);
+            });
+
+            // Set reasonable bounds if we have a location
+            if (lat && lng && zoom > 10) {
+                addMarker(lat, lng);
+                map.setView([lat, lng], zoom);
+            }
+        }
+
+        function requestLocationPermission() {
+            const statusElement = document.getElementById('locationStatus');
+            
+            // First check if we already have permission
+            if (navigator.permissions) {
+                navigator.permissions.query({name: 'geolocation'})
+                    .then(function(permissionStatus) {
+                        if (permissionStatus.state === 'granted') {
+                            getLocation();
+                        } else if (permissionStatus.state === 'prompt') {
+                            showLocationPrompt();
+                        } else {
+                            showPermissionDenied();
+                        }
+                        
+                        permissionStatus.onchange = function() {
+                            if (this.state === 'granted') {
+                                getLocation();
+                            } else {
+                                showPermissionDenied();
+                            }
+                        };
+                    });
+            } else {
+                // Fallback for browsers that don't support permissions API
+                showLocationPrompt();
+            }
+        }
+
+        function showLocationPrompt() {
+            const statusElement = document.getElementById('locationStatus');
+            statusElement.innerHTML = `
+                <span class="text-sm text-gray-600">Please allow location access in your browser</span>
+                <button onclick="getLocation()" class="ml-2 text-sm text-blue-500 hover:text-blue-700">
+                    Try Again
+                </button>
+            `;
+            
+            // Directly try to get location (will trigger browser prompt)
+            getLocation();
+        }
+
+        function showPermissionDenied() {
+            const statusElement = document.getElementById('locationStatus');
+            statusElement.innerHTML = `
+                <span class="text-sm text-red-500">Location access was denied. 
+                <button onclick="showLocationHelp()" class="text-blue-500 hover:text-blue-700">
+                    How to enable?
+                </button>
+                </span>
+            `;
+        }
+
+        function showLocationHelp() {
+            alert("To enable location access:\n\n1. Click the padlock icon in your browser's address bar\n2. Select 'Site settings'\n3. Change 'Location' to 'Allow'\n4. Refresh the page");
+        }
+
+        function getLocation() {
+            const statusElement = document.getElementById('locationStatus');
+            statusElement.innerHTML = '<span class="text-sm text-gray-600">Detecting your location...</span>';
+
+            if (!navigator.geolocation) {
+                statusElement.innerHTML = '<span class="text-sm text-red-500">Geolocation not supported by your browser</span>';
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    
+                    updateLocation(lat, lng);
+                    saveLocation(lat, lng);
+                    
+                    statusElement.innerHTML = '<span class="text-sm text-green-500">Location detected!</span>';
+                },
+                function(error) {
+                    let errorMessage = "Error: ";
+                    switch (error.code) {
+                        case error.PERMISSION_DENIED:
+                            showPermissionDenied();
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage += "Location unavailable";
+                            statusElement.innerHTML = `<span class="text-sm text-red-500">${errorMessage}</span>`;
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage += "Request timed out";
+                            statusElement.innerHTML = `<span class="text-sm text-red-500">${errorMessage}</span>`;
+                            break;
+                        default:
+                            errorMessage += "Unknown error";
+                            statusElement.innerHTML = `<span class="text-sm text-red-500">${errorMessage}</span>`;
+                    }
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        }
+
+        function addMarker(lat, lng) {
+            if (marker) {
+                marker.setLatLng([lat, lng]);
+            } else {
+                marker = L.marker([lat, lng], {
+                    draggable: true
+                }).addTo(map);
+
+                marker.on('dragend', function() {
+                    const newPosition = marker.getLatLng();
+                    updateLocation(newPosition.lat, newPosition.lng);
+                });
+            }
+
+            map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
+        }
+
+        function updateLocation(lat, lng, address = null) {
+            document.getElementById('lat').value = lat;
+            document.getElementById('lng').value = lng;
+            addMarker(lat, lng);
+
+            if (address) {
+                document.getElementById('delivery_address').value = address;
+            } else {
+                reverseGeocode(lat, lng);
+            }
+        }
+
+        function reverseGeocode(lat, lng) {
+            geocoder.reverse(
+                { lat: lat, lng: lng },
+                map.getZoom(),
+                function(results) {
+                    if (results && results.length > 0) {
+                        document.getElementById('delivery_address').value = results[0].name;
+                    }
+                }
+            );
+        }
+
+        function saveLocation(lat, lng) {
+            const address = document.getElementById('delivery_address').value;
+            document.getElementById('save_lat').value = lat;
+            document.getElementById('save_lng').value = lng;
+            document.getElementById('save_address').value = address;
+            document.getElementById('locationForm').submit();
+        }
+
+        // Quantity button functionality
         function incrementQuantity(button) {
             const input = button.parentElement.querySelector('input[type="number"]');
             input.value = parseInt(input.value) + 1;
         }
-        
+
         function decrementQuantity(button) {
             const input = button.parentElement.querySelector('input[type="number"]');
             if (parseInt(input.value) > 1) {
                 input.value = parseInt(input.value) - 1;
             }
         }
-        
-        // Initialize when DOM is loaded
-        document.addEventListener('DOMContentLoaded', function() {
-            // You can add any initialization code here if needed
-        });
     </script>
 </body>
 </html>
+<?php ob_end_flush(); ?>
