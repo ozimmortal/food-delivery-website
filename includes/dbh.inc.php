@@ -4,7 +4,7 @@ $host = "127.0.0.1";
 $port = "3306";
 $dbname = "dl";
 $dbusrn = "root";
-$dbpwd = "oliy2627";
+$dbpwd = "";
 
 // Correct DSN format
 $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8mb4";
