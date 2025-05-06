@@ -10,6 +10,69 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'delivery') {
 
 $deliveryUserId = $_SESSION['user_id'];
 
+// Get current user data
+$userData = [];
+try {
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$deliveryUserId]);
+    $userData = $stmt->fetch();
+} catch (PDOException $e) {
+    $_SESSION['error'] = "Error loading user data: " . $e->getMessage();
+}
+
+// Handle profile updates
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
+    $name = $_POST['name'];
+    $phone = $_POST['phone'];
+    $address = $_POST['address'];
+    $latitude = $_POST['latitude'];
+    $longitude = $_POST['longitude'];
+
+    // Handle file upload
+    $imagePath = $userData['image'];
+    if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
+        $uploadDir = '../../uploads/profiles/';
+        if (!file_exists($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
+        }
+        
+        $fileExt = pathinfo($_FILES['profile_image']['name'], PATHINFO_EXTENSION);
+        $fileName = 'delivery_' . $deliveryUserId . '_' . time() . '.' . $fileExt;
+        $targetPath = $uploadDir . $fileName;
+        
+        if (move_uploaded_file($_FILES['profile_image']['tmp_name'], $targetPath)) {
+            // Delete old image if it exists and isn't the default
+            if ($imagePath && !str_contains($imagePath, 'assets/default-profile.jpg')) {
+                @unlink('../../' . $imagePath);
+            }
+            $imagePath = 'uploads/profiles/' . $fileName;
+        } else {
+            $_SESSION['error'] = "Failed to upload profile image";
+        }
+    }
+
+    try {
+        $stmt = $pdo->prepare("UPDATE users SET name = ?, phone = ?, address = ?, image = ? WHERE id = ?");
+        $stmt->execute([$name, $phone, $address, $imagePath, $deliveryUserId]);
+        
+        // Update delivery location if coordinates are provided
+        if ($latitude && $longitude) {
+            $stmt = $pdo->prepare("INSERT INTO delivery_locations (delivery_id, latitude, longitude) 
+                                  VALUES (?, ?, ?)
+                                  ON DUPLICATE KEY UPDATE 
+                                  latitude = VALUES(latitude), 
+                                  longitude = VALUES(longitude)");
+            $stmt->execute([$deliveryUserId, $latitude, $longitude]);
+        }
+        
+        $_SESSION['success'] = "Profile updated successfully!";
+        header("Location: index.php");
+        exit();
+    } catch (PDOException $e) {
+        $_SESSION['error'] = "Error updating profile: " . $e->getMessage();
+    }
+}
+
 // Handle order status updates
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['update_status'])) {
@@ -97,6 +160,16 @@ try {
     $_SESSION['error'] = "Error loading available orders";
 }
 
+// Get delivery location if exists
+$deliveryLocation = [];
+try {
+    $stmt = $pdo->prepare("SELECT latitude, longitude FROM delivery_locations WHERE delivery_id = ? ORDER BY updated_at DESC LIMIT 1");
+    $stmt->execute([$deliveryUserId]);
+    $deliveryLocation = $stmt->fetch();
+} catch (PDOException $e) {
+    error_log("Error fetching delivery location: " . $e->getMessage());
+}
+
 // Function to get status badge class
 function getStatusBadgeClass($status) {
     switch ($status) {
@@ -120,6 +193,7 @@ function getStatusBadgeClass($status) {
     <title>Delivery Dashboard | Savory</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <style>
         .order-card {
             transition: all 0.2s ease;
@@ -135,6 +209,27 @@ function getStatusBadgeClass($status) {
             border-bottom: 2px solid #f97316;
             color: #f97316;
             font-weight: 500;
+        }
+        #map, #profile-map {
+            height: 300px;
+            width: 100%;
+            border-radius: 0.5rem;
+        }
+        .map-container {
+            margin-top: 1rem;
+        }
+        .profile-image-container {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            overflow: hidden;
+            margin: 0 auto;
+            border: 3px solid #f97316;
+        }
+        .profile-image-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
     </style>
 </head>
@@ -182,6 +277,9 @@ function getStatusBadgeClass($status) {
                 </button>
                 <button id="available-tab" class="tab-button py-4 px-1 text-gray-500 hover:text-gray-700">
                     <i class="fas fa-list-alt mr-2"></i> Available Orders
+                </button>
+                <button id="profile-tab" class="tab-button py-4 px-1 text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-user mr-2"></i> My Profile
                 </button>
             </div>
         </div>
@@ -257,6 +355,28 @@ function getStatusBadgeClass($status) {
                                     </ul>
                                 </div>
                             </div>
+
+                            <!-- Map Section -->
+                            <?php if ($order['customer_latitude'] && $order['customer_longitude']): ?>
+                                <div class="p-4 border-t">
+                                    <h4 class="font-medium text-gray-700 mb-2">
+                                        <i class="fas fa-map-marker-alt mr-2 text-orange-500"></i> Delivery Location
+                                    </h4>
+                                    <div id="map-<?= $order['id'] ?>" class="map-container">
+                                        <!-- Map will be rendered here -->
+                                    </div>
+                                    <div class="mt-2 flex justify-between">
+                                        <button onclick="getCurrentLocation(<?= $order['id'] ?>, <?= $order['customer_latitude'] ?>, <?= $order['customer_longitude'] ?>)" 
+                                                class="bg-orange-500 text-white px-3 py-1 rounded text-sm hover:bg-orange-600">
+                                            Show Route from My Location
+                                        </button>
+                                        <a href="https://www.google.com/maps/dir/?api=1&destination=<?= $order['customer_latitude'] ?>,<?= $order['customer_longitude'] ?>" 
+                                           target="_blank" class="text-orange-500 hover:text-orange-700 text-sm flex items-center">
+                                            Open in Google Maps <i class="fas fa-external-link-alt ml-1"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
 
                             <!-- Status Update -->
                             <div class="p-4 border-t bg-gray-50">
@@ -338,22 +458,308 @@ function getStatusBadgeClass($status) {
                 </div>
             <?php endif; ?>
         </div>
+
+        <!-- Profile Tab -->
+        <div id="profile-tab-content" class="tab-content hidden">
+            <h2 class="text-2xl font-bold mb-6">My Profile</h2>
+            
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Left Column -->
+                        <div class="space-y-6">
+                            <!-- Profile Image -->
+                            <div class="text-center">
+                                <div class="profile-image-container mb-4">
+                                    <img src="../../<?= htmlspecialchars($userData['image'] ?: 'assets/default-profile.jpg') ?>" 
+                                         alt="Profile Image" id="profile-image-preview">
+                                </div>
+                                <div class="flex justify-center">
+                                    <label class="cursor-pointer bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600">
+                                        <i class="fas fa-camera mr-2"></i> Change Photo
+                                        <input type="file" name="profile_image" id="profile-image-input" class="hidden" accept="image/*">
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <!-- Personal Info -->
+                            <div>
+                                <h3 class="text-lg font-medium text-gray-700 mb-4">Personal Information</h3>
+                                <div class="space-y-4">
+                                    <div>
+                                        <label for="name" class="block text-sm font-medium text-gray-700">Full Name</label>
+                                        <input type="text" id="name" name="name" value="<?= htmlspecialchars($userData['name'] ?? '') ?>" 
+                                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-orange-500 focus:border-orange-500">
+                                    </div>
+                                    <div>
+                                        <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+                                        <input type="email" id="email" name="email" value="<?= htmlspecialchars($userData['email'] ?? '') ?>" 
+                                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-gray-100 cursor-not-allowed" disabled>
+                                    </div>
+                                    <div>
+                                        <label for="phone" class="block text-sm font-medium text-gray-700">Phone Number</label>
+                                        <input type="tel" id="phone" name="phone" value="<?= htmlspecialchars($userData['phone'] ?? '') ?>" 
+                                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-orange-500 focus:border-orange-500">
+                                    </div>
+                                    <div>
+                                        <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
+                                        <textarea id="address" name="address" rows="3" 
+                                                  class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-orange-500 focus:border-orange-500"><?= htmlspecialchars($userData['address'] ?? '') ?></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Right Column -->
+                        <div class="space-y-6">
+                            <!-- Location Map -->
+                            <div>
+                                <h3 class="text-lg font-medium text-gray-700 mb-4">Delivery Location</h3>
+                                <p class="text-sm text-gray-500 mb-2">Set your current location for better order assignments</p>
+                                <div id="profile-map" class="map-container mb-4"></div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label for="latitude" class="block text-sm font-medium text-gray-700">Latitude</label>
+                                        <input type="text" id="latitude" name="latitude" 
+                                               value="<?= htmlspecialchars($deliveryLocation['latitude'] ?? '') ?>" 
+                                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-orange-500 focus:border-orange-500">
+                                    </div>
+                                    <div>
+                                        <label for="longitude" class="block text-sm font-medium text-gray-700">Longitude</label>
+                                        <input type="text" id="longitude" name="longitude" 
+                                               value="<?= htmlspecialchars($deliveryLocation['longitude'] ?? '') ?>" 
+                                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-orange-500 focus:border-orange-500">
+                                    </div>
+                                </div>
+                                <button type="button" id="get-location-btn" class="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600">
+                                    <i class="fas fa-location-arrow mr-2"></i> Use My Current Location
+                                </button>
+                            </div>
+                            
+                            <!-- Save Button -->
+                            <div class="pt-6 border-t border-gray-200">
+                                <button type="submit" name="update_profile" class="w-full bg-orange-500 text-white px-4 py-2 rounded-md hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500">
+                                    Save Changes
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script>
         // Tab functionality
-        document.getElementById('assigned-tab').addEventListener('click', function() {
-            document.getElementById('assigned-orders').classList.remove('hidden');
-            document.getElementById('available-orders').classList.add('hidden');
-            this.classList.add('active');
-            document.getElementById('available-tab').classList.remove('active');
+        const tabs = {
+            'assigned-tab': 'assigned-orders',
+            'available-tab': 'available-orders',
+            'profile-tab': 'profile-tab-content'
+        };
+
+        Object.entries(tabs).forEach(([tabId, contentId]) => {
+            document.getElementById(tabId).addEventListener('click', function() {
+                // Hide all tab contents and deactivate all tabs
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.add('hidden');
+                });
+                document.querySelectorAll('.tab-button').forEach(tab => {
+                    tab.classList.remove('active');
+                    tab.classList.add('text-gray-500');
+                });
+
+                // Show selected tab content and activate tab
+                document.getElementById(contentId).classList.remove('hidden');
+                this.classList.add('active');
+                this.classList.remove('text-gray-500');
+            });
         });
+// Store map instances by order ID
+const orderMaps = {};
+
+// Initialize maps for orders with coordinates
+function initMap(orderId, customerLat, customerLng) {
+    if (orderMaps[orderId]) {
+        // Map already exists, just return it
+        return orderMaps[orderId];
+    }
+    
+    const map = L.map(`map-${orderId}`).setView([customerLat, customerLng], 13);
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+    
+    // Add customer location marker
+    L.marker([customerLat, customerLng]).addTo(map)
+        .bindPopup('Customer Location')
+        .openPopup();
+    
+    // Store the map instance
+    orderMaps[orderId] = map;
+    
+    return map;
+}
+
+// Show route from current location to customer
+function showRoute(orderId, customerLat, customerLng) {
+    if (!navigator.geolocation) {
+        alert("Geolocation is not supported by this browser.");
+        initMap(orderId, customerLat, customerLng);
+        return;
+    }
+
+    // Show loading state
+    const button = document.querySelector(`button[onclick="showRoute(${orderId}, ${customerLat}, ${customerLng})"]`);
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Getting Location...';
+    button.disabled = true;
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const userLat = position.coords.latitude;
+            const userLng = position.coords.longitude;
+            
+            // Initialize or get existing map
+            const map = orderMaps[orderId] || initMap(orderId, customerLat, customerLng);
+            
+            // Clear existing layers except base tile layer
+            map.eachLayer(layer => {
+                if (!layer._url || !layer._url.includes('tile.openstreetmap.org')) {
+                    map.removeLayer(layer);
+                }
+            });
+            
+            // Add markers
+            const userMarker = L.marker([userLat, userLng]).addTo(map)
+                .bindPopup('Your Location')
+                .openPopup();
+            
+            const customerMarker = L.marker([customerLat, customerLng]).addTo(map)
+                .bindPopup('Customer Location');
+            
+            // Add routing line
+            const route = L.polyline(
+                [[userLat, userLng], [customerLat, customerLng]],
+                {color: 'blue', dashArray: '5, 5', weight: 3}
+            ).addTo(map);
+            
+            // Fit map to show both points
+            map.fitBounds([
+                [userLat, userLng],
+                [customerLat, customerLng]
+            ]);
+            
+            // Restore button state
+            button.innerHTML = originalText;
+            button.disabled = false;
+        },
+        (error) => {
+            alert(`Error getting your location: ${error.message}`);
+            // Just show customer location if geolocation fails
+            initMap(orderId, customerLat, customerLng);
+            
+            // Restore button state
+            button.innerHTML = originalText;
+            button.disabled = false;
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        }
+    );
+}
+
+        // Initialize profile map
+        let profileMap;
+        let profileMarker;
         
-        document.getElementById('available-tab').addEventListener('click', function() {
-            document.getElementById('assigned-orders').classList.add('hidden');
-            document.getElementById('available-orders').classList.remove('hidden');
-            this.classList.add('active');
-            document.getElementById('assigned-tab').classList.remove('active');
+        function initProfileMap(lat, lng) {
+            profileMap = L.map('profile-map').setView([lat || 0, lng || 0], lat && lng ? 13 : 2);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(profileMap);
+            
+            if (lat && lng) {
+                profileMarker = L.marker([lat, lng]).addTo(profileMap)
+                    .bindPopup('Your Location')
+                    .openPopup();
+            }
+            
+            // Add click event to update location
+            profileMap.on('click', function(e) {
+                const { lat, lng } = e.latlng;
+                document.getElementById('latitude').value = lat.toFixed(6);
+                document.getElementById('longitude').value = lng.toFixed(6);
+                
+                if (profileMarker) {
+                    profileMarker.setLatLng([lat, lng]);
+                } else {
+                    profileMarker = L.marker([lat, lng]).addTo(profileMap)
+                        .bindPopup('Your Location')
+                        .openPopup();
+                }
+            });
+        }
+
+        // Get current location for profile
+        document.getElementById('get-location-btn').addEventListener('click', function() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        
+                        document.getElementById('latitude').value = lat.toFixed(6);
+                        document.getElementById('longitude').value = lng.toFixed(6);
+                        
+                        if (profileMarker) {
+                            profileMarker.setLatLng([lat, lng]);
+                            profileMap.setView([lat, lng], 13);
+                        } else {
+                            profileMarker = L.marker([lat, lng]).addTo(profileMap)
+                                .bindPopup('Your Location')
+                                .openPopup();
+                            profileMap.setView([lat, lng], 13);
+                        }
+                    },
+                    (error) => {
+                        alert(`Error getting your location: ${error.message}`);
+                    }
+                );
+            } else {
+                alert("Geolocation is not supported by this browser.");
+            }
+        });
+
+        // Profile image preview
+        document.getElementById('profile-image-input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    document.getElementById('profile-image-preview').src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Initialize all maps on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize order maps
+            <?php foreach ($assignedOrders as $order): ?>
+                <?php if ($order['customer_latitude'] && $order['customer_longitude']): ?>
+                    initMap(<?= $order['id'] ?>, <?= $order['customer_latitude'] ?>, <?= $order['customer_longitude'] ?>);
+                <?php endif; ?>
+            <?php endforeach; ?>
+            
+            // Initialize profile map
+            const initialLat = <?= $deliveryLocation['latitude'] ?? 'null' ?>;
+            const initialLng = <?= $deliveryLocation['longitude'] ?? 'null' ?>;
+            initProfileMap(initialLat, initialLng);
         });
     </script>
 </body>
