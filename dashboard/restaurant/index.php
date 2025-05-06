@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
     $stmt->execute([$newStatus, $orderId, $restaurantId]);
     
     $_SESSION['success_message'] = 'Order status updated successfully!';
-    header("Location: orders.php");
+    header("Location: index.php");
     exit();
 }
 

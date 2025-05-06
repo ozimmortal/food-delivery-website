@@ -56,7 +56,7 @@ function getStatusBadgeClass($status) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Orders | Savory</title>
+    <title>My Orders | Sweet Bite</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <style>
@@ -80,7 +80,7 @@ function getStatusBadgeClass($status) {
                 <div class="flex items-center">
                     <a href="index.php" class="text-xl font-bold text-orange-500 flex items-center">
                         <i class="fas fa-utensils mr-2"></i>
-                        Savory
+                        Sweet Bite 
                     </a>
                 </div>
                 <div class="flex items-center space-x-4">
