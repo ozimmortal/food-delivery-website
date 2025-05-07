@@ -34,7 +34,7 @@
                     <i class="fas fa-clipboard-list"></i>
                 </div>
                 <span class="nav-text">Orders</span>
-                <span class="nav-badge">5</span> <!-- Example badge for new orders -->
+                
             </a>
         </li>
 
